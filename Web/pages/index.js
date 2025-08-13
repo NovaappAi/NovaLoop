@@ -1,48 +1,60 @@
 import { useState } from "react";
+import { API_BASE } from "../lib/config";
 
 export default function Home() {
   const [token, setToken] = useState("");
   const [link, setLink] = useState("");
+  const [exp, setExp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
-  function generateToken(bytes = 24) {
-    const arr = new Uint8Array(bytes);
-    if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
-      window.crypto.getRandomValues(arr);
-    } else {
-      for (let i = 0; i < bytes; i++) arr[i] = Math.floor(Math.random() * 256);
+  const onCreateInvite = async () => {
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch(`${API_BASE}/session/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ttl_seconds: 3600 })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json(); // { token, expires_at }
+      setToken(data.token);
+      setExp(new Date(data.expires_at).toLocaleString());
+      const base =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://example.com";
+      setLink(`${base}/join?token=${data.token}`);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
     }
-    return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
-  }
-
-  const onCreateInvite = () => {
-    const t = generateToken();
-    setToken(t);
-    const base =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "https://example.com";
-    setLink(`${base}/join?token=${t}`);
   };
 
   return (
     <main style={{ maxWidth: 680, margin: "40px auto", padding: 16 }}>
       <h1>NovaLoop — Guest Invite</h1>
-      <p>بدون ثبت‌نام لینک مهمان بساز و برای دیگر AIها بفرست.</p>
-      <button onClick={onCreateInvite} style={{ padding: "10px 16px" }}>
-        ساخت لینک دعوت
+      <p>بدون ثبت‌نام یک لینک مهمان بساز و بفرست.</p>
+
+      <button onClick={onCreateInvite} disabled={loading} style={{ padding: "10px 16px" }}>
+        {loading ? "در حال ساخت..." : "ساخت لینک دعوت"}
       </button>
+
+      {err && <p style={{ color: "crimson" }}>خطا: {err}</p>}
+
       {token && (
         <section style={{ marginTop: 16 }}>
           <div><strong>Token:</strong> <code>{token}</code></div>
           <div style={{ marginTop: 8 }}>
             <strong>Invite link:</strong> <a href={link}>{link}</a>
           </div>
-          <p style={{ fontSize: 12, color: "#666" }}>
-            * نسخهٔ بعد: ساخت توکن از طریق ارکستراتور API.
-          </p>
+          <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+            انقضا: {exp}
+          </div>
         </section>
       )}
     </main>
   );
 }
-
