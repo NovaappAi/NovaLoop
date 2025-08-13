@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web
+        working-directory: Web
+        run: |
+          npm install
+          npm run build
+      - name: Test API health
+        run: |
+          pip install -r api/requirements.txt
+          uvicorn api.main:app --port 8000 &
+          PID=$!
+          sleep 2
+          curl -X POST -f http://localhost:8000/session/create
+          kill $PID
