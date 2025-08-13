@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          check-latest: true
+
+      - name: Verify Node & npm
+        run: |
+          echo "node: $(node -v)"
+          echo "npm: $(npm -v)"
+          corepack enable || true
+
+      - name: Install Web dependencies
+        working-directory: Web
+        run: npm install
+
+      - name: Build Web
+        working-directory: Web
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install API dependencies
+        working-directory: api
+        run: pip install -r requirements.txt
+
+      - name: Run API health check
+        run: |
+          uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+          sleep 3
+          curl -f http://127.0.0.1:8000/health
+
+      - name: Test session/create POST
+        run: |
+          # ارسال POST و گرفتن پاسخ
+          RESP=$(curl -s -X POST http://127.0.0.1:8000/session/create \
+            -H "Content-Type: application/json" \
+            -d '{"ttl_seconds": 60}')
+          echo "Response: $RESP"
+
+          # بررسی ساختار پاسخ با پایتون (وجود token و expires_at)
+          python - <<'PY' "$RESP"
+          import json, sys, re
+          data = json.loads(sys.argv[1])
+          assert isinstance(data.get("token"), str) and len(data["token"]) > 10, "token missing/short"
+          assert isinstance(data.get("expires_at"), str) and re.match(r"^\d{4}-\d{2}-\d{2}T", data["expires_at"]), "expires_at invalid"
+          print("session/create OK")
+          PY
+          "$RESP"
