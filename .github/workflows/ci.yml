@@ -1,0 +1,57 @@
+name: CI — NovaLoop Build & Health Check
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          check-latest: true
+
+      - name: Verify Node & npm
+        run: |
+          echo "node: $(node -v)"
+          echo "which node: $(which node)"
+          echo "npm: $(npm -v || echo 'npm not found')"
+          echo "which npm: $(which npm || echo 'not found')"
+          corepack enable || true
+
+      - name: Install Web dependencies
+        working-directory: Web
+        run: |
+          if ! command -v npm >/dev/null 2>&1; then
+            echo "npm not on PATH; using corepack to ensure npm"
+            corepack enable
+          fi
+          npm install
+
+      - name: Build Web
+        working-directory: Web
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install API dependencies
+        working-directory: api
+        run: pip install -r requirements.txt
+
+      - name: Run API health check
+        run: |
+          uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -f http://127.0.0.1:8000/health
